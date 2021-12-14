@@ -128,6 +128,11 @@ type WebFrontEndImpl struct {
 	// CORS settings
 	AllowOrigins []string
 
+	// Various time intervals
+	times Times
+}
+
+type Times struct {
 	// Maximum duration of a request
 	RequestTimeout time.Duration
 
@@ -135,14 +140,19 @@ type WebFrontEndImpl struct {
 	// accessed via Boulder-specific GET-able APIs. Resources newer than
 	// staleTimeout must be accessed via POST-as-GET and the RFC 8555 ACME API. We
 	// do this to incentivize client developers to use the standard API.
-	staleTimeout time.Duration
+	StaleTimeout time.Duration
 
 	// How long before authorizations and pending authorizations expire. The
 	// Boulder specific GET-able API uses these values to find the creation date
 	// of authorizations to determine if they are stale enough. The values should
 	// match the ones used by the RA.
-	authorizationLifetime        time.Duration
-	pendingAuthorizationLifetime time.Duration
+	AuthorizationLifetime        time.Duration
+	PendingAuthorizationLifetime time.Duration
+
+	// How long to wait before considering an account update (deactivation or key
+	// change) to be complete after finishing the RPC. This is to allow the
+	// internal account caches in all the WFEs to purge the old value.
+	AccountUpdateDelay time.Duration
 }
 
 // NewWebFrontEndImpl constructs a web service for Boulder
@@ -155,9 +165,7 @@ func NewWebFrontEndImpl(
 	remoteNonceService noncepb.NonceServiceClient,
 	noncePrefixMap map[string]noncepb.NonceServiceClient,
 	logger blog.Logger,
-	staleTimeout time.Duration,
-	authorizationLifetime time.Duration,
-	pendingAuthorizationLifetime time.Duration,
+	times Times,
 	rac rapb.RegistrationAuthorityClient,
 	sac sapb.StorageAuthorityClient,
 	accountGetter AccountGetter,
@@ -171,20 +179,18 @@ func NewWebFrontEndImpl(
 	}
 
 	wfe := WebFrontEndImpl{
-		log:                          logger,
-		clk:                          clk,
-		keyPolicy:                    keyPolicy,
-		certificateChains:            certificateChains,
-		issuerCertificates:           issuerCertificates,
-		stats:                        initStats(stats),
-		remoteNonceService:           remoteNonceService,
-		noncePrefixMap:               noncePrefixMap,
-		staleTimeout:                 staleTimeout,
-		authorizationLifetime:        authorizationLifetime,
-		pendingAuthorizationLifetime: pendingAuthorizationLifetime,
-		ra:                           rac,
-		sa:                           sac,
-		accountGetter:                accountGetter,
+		log:                logger,
+		clk:                clk,
+		keyPolicy:          keyPolicy,
+		certificateChains:  certificateChains,
+		issuerCertificates: issuerCertificates,
+		stats:              initStats(stats),
+		remoteNonceService: remoteNonceService,
+		noncePrefixMap:     noncePrefixMap,
+		times:              times,
+		ra:                 rac,
+		sa:                 sac,
+		accountGetter:      accountGetter,
 	}
 
 	if wfe.remoteNonceService == nil {
@@ -288,7 +294,7 @@ func (wfe *WebFrontEndImpl) HandleFunc(mux *http.ServeMux, pattern string, h web
 
 			wfe.setCORSHeaders(response, request, "")
 
-			timeout := wfe.RequestTimeout
+			timeout := wfe.times.RequestTimeout
 			if timeout == 0 {
 				timeout = 5 * time.Minute
 			}

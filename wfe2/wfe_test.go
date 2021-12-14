@@ -379,9 +379,11 @@ func setupWFE(t *testing.T) (WebFrontEndImpl, clock.FakeClock) {
 		nil,
 		nil,
 		blog.NewMock(),
-		10*time.Second,
-		30*24*time.Hour,
-		7*24*time.Hour,
+		Times{
+			StaleTimeout:                 10 * time.Second,
+			AuthorizationLifetime:        30 * 24 * time.Hour,
+			PendingAuthorizationLifetime: 7 * 24 * time.Hour,
+		},
 		&MockRegistrationAuthority{},
 		mockSA,
 		mockSA)

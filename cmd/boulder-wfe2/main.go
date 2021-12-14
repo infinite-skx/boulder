@@ -429,9 +429,11 @@ func main() {
 		rns,
 		npm,
 		logger,
-		c.WFE.StaleTimeout.Duration,
-		authorizationLifetime,
-		pendingAuthorizationLifetime,
+		wfe2.Times{
+			StaleTimeout:                 c.WFE.StaleTimeout.Duration,
+			AuthorizationLifetime:        authorizationLifetime,
+			PendingAuthorizationLifetime: pendingAuthorizationLifetime,
+		},
 		rac,
 		sac,
 		accountGetter)

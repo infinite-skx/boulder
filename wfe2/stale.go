@@ -50,11 +50,11 @@ func (wfe *WebFrontEndImpl) staleEnoughToGETAuthz(authzPB *corepb.Authorization)
 	// pendingAuthorization lifetime from the expiry. This will be inaccurate if
 	// we change the pendingAuthorizationLifetime but is sufficient for the weak
 	// staleness requirements of the GET API.
-	createdTime := time.Unix(0, authzPB.Expires).Add(-wfe.pendingAuthorizationLifetime)
+	createdTime := time.Unix(0, authzPB.Expires).Add(-wfe.times.PendingAuthorizationLifetime)
 	// if the authz is valid then we need to subtract the authorizationLifetime
 	// instead of the pendingAuthorizationLifetime.
 	if core.AcmeStatus(authzPB.Status) == core.StatusValid {
-		createdTime = time.Unix(0, authzPB.Expires).Add(-wfe.authorizationLifetime)
+		createdTime = time.Unix(0, authzPB.Expires).Add(-wfe.times.AuthorizationLifetime)
 	}
 	return wfe.staleEnoughToGET("Authorization", createdTime)
 }
@@ -63,12 +63,12 @@ func (wfe *WebFrontEndImpl) staleEnoughToGETAuthz(authzPB *corepb.Authorization)
 // least wfe.staleTimeout in the past. If the resource is newer than the
 // wfe.staleTimeout then an unauthorized problem is returned.
 func (wfe *WebFrontEndImpl) staleEnoughToGET(resourceType string, createDate time.Time) *probs.ProblemDetails {
-	if wfe.clk.Since(createDate) < wfe.staleTimeout {
+	if wfe.clk.Since(createDate) < wfe.times.StaleTimeout {
 		return probs.Unauthorized(fmt.Sprintf(
 			"%s is too new for GET API. "+
 				"You should only use this non-standard API to access resources created more than %s ago",
 			resourceType,
-			wfe.staleTimeout))
+			wfe.times.StaleTimeout))
 	}
 	return nil
 }
