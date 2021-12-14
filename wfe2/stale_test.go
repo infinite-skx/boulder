@@ -48,7 +48,7 @@ func TestRequiredStale(t *testing.T) {
 
 func TestSaleEnoughToGETOrder(t *testing.T) {
 	fc := clock.NewFake()
-	wfe := WebFrontEndImpl{clk: fc, staleTimeout: time.Minute * 30}
+	wfe := WebFrontEndImpl{clk: fc, times: Times{StaleTimeout: time.Minute * 30}}
 	fc.Add(time.Hour * 24)
 	created := fc.Now().UnixNano()
 	fc.Add(time.Hour)
@@ -61,13 +61,15 @@ func TestSaleEnoughToGETOrder(t *testing.T) {
 func TestStaleEnoughToGETAuthzDeactivated(t *testing.T) {
 	fc := clock.NewFake()
 	wfe := WebFrontEndImpl{
-		clk:                          fc,
-		staleTimeout:                 time.Minute * 30,
-		pendingAuthorizationLifetime: 7 * 24 * time.Hour,
-		authorizationLifetime:        30 * 24 * time.Hour,
+		clk: fc,
+		times: Times{
+			StaleTimeout:                 time.Minute * 30,
+			PendingAuthorizationLifetime: 7 * 24 * time.Hour,
+			AuthorizationLifetime:        30 * 24 * time.Hour,
+		},
 	}
 	fc.Add(time.Hour * 24)
-	expires := fc.Now().Add(wfe.authorizationLifetime).UnixNano()
+	expires := fc.Now().Add(wfe.times.AuthorizationLifetime).UnixNano()
 	fc.Add(time.Hour)
 	prob := wfe.staleEnoughToGETAuthz(&corepb.Authorization{
 		Status:  string(core.StatusDeactivated),

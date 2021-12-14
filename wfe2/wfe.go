@@ -1491,6 +1491,7 @@ func (wfe *WebFrontEndImpl) updateAccount(
 			return nil, web.ProblemDetailsForError(err, "Unable to deactivate account")
 		}
 		currAcct.Status = core.StatusDeactivated
+		wfe.clk.Sleep(wfe.times.AccountUpdateDelay)
 		return currAcct, nil
 	}
 
@@ -2011,7 +2012,7 @@ func (wfe *WebFrontEndImpl) KeyRollover(
 		return
 	}
 	prepAccountForDisplay(&updatedAcct)
-
+	wfe.clk.Sleep(wfe.times.AccountUpdateDelay)
 	err = wfe.writeJsonResponse(response, logEvent, http.StatusOK, updatedAcct)
 	if err != nil {
 		wfe.sendError(response, logEvent, probs.ServerInternal("Failed to marshal updated account"), err)

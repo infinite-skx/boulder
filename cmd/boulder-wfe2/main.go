@@ -123,6 +123,11 @@ type config struct {
 		// It should match the value configured in the RA.
 		PendingAuthorizationLifetimeDays int
 
+		// For account deactivations and key changes, how long to wait before
+		// considering the change complete. This is to all all the WFEs to have expired
+		// the old version from their cache.
+		AccountUpdateDelay time.Duration
+
 		AccountCache *CacheConfig
 	}
 
@@ -433,6 +438,7 @@ func main() {
 			StaleTimeout:                 c.WFE.StaleTimeout.Duration,
 			AuthorizationLifetime:        authorizationLifetime,
 			PendingAuthorizationLifetime: pendingAuthorizationLifetime,
+			AccountUpdateDelay:           c.WFE.AccountUpdateDelay,
 		},
 		rac,
 		sac,
