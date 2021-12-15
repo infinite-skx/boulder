@@ -2312,7 +2312,8 @@ func TestDeactivateAuthorization(t *testing.T) {
 
 func TestDeactivateAccount(t *testing.T) {
 	responseWriter := httptest.NewRecorder()
-	wfe, _ := setupWFE(t)
+	wfe, clk := setupWFE(t)
+	wfe.times.AccountUpdateDelay = time.Minute
 
 	responseWriter.Body.Reset()
 	payload := `{"status":"asd"}`
@@ -2331,7 +2332,11 @@ func TestDeactivateAccount(t *testing.T) {
 	_, _, body = signRequestKeyID(t, 1, nil, signedURL, payload, wfe.nonceService)
 	request = makePostRequestWithPath(path, body)
 
+	begin := clk.Now()
 	wfe.Account(ctx, newRequestEvent(), responseWriter, request)
+	elapsed := clk.Now().Sub(begin)
+	test.Assert(t, elapsed >= time.Minute, fmt.Sprintf("account deactivation did not impose change delay. elapsed %s", elapsed))
+
 	test.AssertUnmarshaledEquals(t,
 		responseWriter.Body.String(),
 		`{
@@ -2782,6 +2787,39 @@ func TestKeyRollover(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestKeyRolloverDelay(t *testing.T) {
+	responseWriter := httptest.NewRecorder()
+	wfe, clk := setupWFE(t)
+	wfe.times.AccountUpdateDelay = time.Minute
+
+	newKeyBytes, err := ioutil.ReadFile("../test/test-key-5.der")
+	test.AssertNotError(t, err, "Failed to read ../test/test-key-5.der")
+	newKeyPriv, err := x509.ParsePKCS1PrivateKey(newKeyBytes)
+	test.AssertNotError(t, err, "Failed parsing private key")
+	newJWKJSON, err := jose.JSONWebKey{Key: newKeyPriv.Public()}.MarshalJSON()
+	test.AssertNotError(t, err, "Failed to marshal JWK JSON")
+
+	payload := `{"oldKey":` + test1KeyPublicJSON + `,"account":"http://localhost/acme/acct/1"}`
+	expectedResponse := `{
+		     "key": ` + string(newJWKJSON) + `,
+		     "contact": [
+		       "mailto:person@mail.com"
+		     ],
+		     "initialIp": "",
+		     "status": "valid"
+		   }`
+	newKey := newKeyPriv
+
+	_, _, inner := signRequestEmbed(t, newKey, "http://localhost/key-change", payload, wfe.nonceService)
+	_, _, outer := signRequestKeyID(t, 1, nil, "http://localhost/key-change", inner, wfe.nonceService)
+
+	begin := clk.Now()
+	wfe.KeyRollover(ctx, newRequestEvent(), responseWriter, makePostRequestWithPath("key-change", outer))
+	test.AssertUnmarshaledEquals(t, responseWriter.Body.String(), expectedResponse)
+	elapsed := clk.Now().Sub(begin)
+	test.Assert(t, elapsed >= time.Minute, fmt.Sprintf("KeyRollover did not impose change delay. elapsed %s", elapsed))
 }
 
 func TestKeyRolloverMismatchedJWSURLs(t *testing.T) {
