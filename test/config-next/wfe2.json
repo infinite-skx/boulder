@@ -29,6 +29,7 @@
       "size": 9000,
       "ttl": "5s"
     },
+    "accountUpdateDelay": "5.1s",
     "getNonceService": {
       "serverAddress": "nonce.boulder:9101",
       "timeout": "15s"
