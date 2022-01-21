@@ -571,13 +571,6 @@ func (ra *RegistrationAuthorityImpl) checkNewOrdersPerAccountLimit(ctx context.C
 	return nil
 }
 
-// NewAuthorization constructs a new Authz from a request. Values (domains) in
-// request.Identifier will be lowercased before storage.
-// TODO(#5681): Remove this method entirely
-func (ra *RegistrationAuthorityImpl) NewAuthorization(ctx context.Context, req *rapb.NewAuthorizationRequest) (*corepb.Authorization, error) {
-	return nil, fmt.Errorf("The ACME v1 NewAuthorization flow is deprecated")
-}
-
 // MatchesCSR tests the contents of a generated certificate to make sure
 // that the PublicKey, CommonName, and DNSNames match those provided in
 // the CSR that was used to generate the certificate. It also checks the
@@ -998,11 +991,6 @@ func (ra *RegistrationAuthorityImpl) FinalizeOrder(ctx context.Context, req *rap
 	// order itself after setting the status
 	order.Status = string(core.StatusValid)
 	return order, nil
-}
-
-// NewCertificate requests the issuance of a certificate for the v1 flow.
-func (ra *RegistrationAuthorityImpl) NewCertificate(ctx context.Context, req *rapb.NewCertificateRequest) (*corepb.Certificate, error) {
-	return nil, errors.New("The ACME v1 NewCertificate flow is deprecated")
 }
 
 // To help minimize the chance that an accountID would be used as an order ID
@@ -1700,7 +1688,7 @@ func revokeEvent(state, serial, cn string, names []string, revocationCode revoca
 
 // revokeCertificate generates a revoked OCSP response for the given certificate, stores
 // the revocation information, and purges OCSP request URLs from Akamai.
-func (ra *RegistrationAuthorityImpl) revokeCertificate(ctx context.Context, cert *x509.Certificate, reason revocation.Reason, revokedBy int64, source string, comment string) error {
+func (ra *RegistrationAuthorityImpl) revokeCertificate(ctx context.Context, cert *x509.Certificate, reason revocation.Reason, revokedBy int64, source string, comment string, skipBlockKey bool) error {
 	serial := core.SerialToString(cert.SerialNumber)
 
 	var issuerID int64
@@ -1759,7 +1747,7 @@ func (ra *RegistrationAuthorityImpl) revokeCertificate(ctx context.Context, cert
 		return err
 	}
 
-	if reason == ocsp.KeyCompromise {
+	if reason == ocsp.KeyCompromise && !skipBlockKey {
 		digest, err := core.KeyDigest(cert.PublicKey)
 		if err != nil {
 			return err
@@ -1806,7 +1794,7 @@ func (ra *RegistrationAuthorityImpl) RevokeCertificateWithReg(ctx context.Contex
 	serialString := core.SerialToString(cert.SerialNumber)
 	revocationCode := revocation.Reason(req.Code)
 
-	err = ra.revokeCertificate(ctx, cert, revocationCode, req.RegID, "API", "")
+	err = ra.revokeCertificate(ctx, cert, revocationCode, req.RegID, "API", "", false)
 
 	state := "Failure"
 	defer func() {
@@ -1847,6 +1835,9 @@ func (ra *RegistrationAuthorityImpl) AdministrativelyRevokeCertificate(ctx conte
 	if revocationCode == ocsp.KeyCompromise && req.Cert == nil {
 		return nil, fmt.Errorf("cannot revoke for KeyCompromise by serial alone")
 	}
+	if req.SkipBlockKey && revocationCode != ocsp.KeyCompromise {
+		return nil, fmt.Errorf("cannot skip key blocking for reasons other than KeyCompromise")
+	}
 
 	var cert *x509.Certificate
 	var serialString string
@@ -1883,7 +1874,7 @@ func (ra *RegistrationAuthorityImpl) AdministrativelyRevokeCertificate(ctx conte
 			req.AdminName)
 	}()
 
-	err = ra.revokeCertificate(ctx, cert, revocationCode, 0, "admin-revoker", fmt.Sprintf("revoked by %s", req.AdminName))
+	err = ra.revokeCertificate(ctx, cert, revocationCode, 0, "admin-revoker", fmt.Sprintf("revoked by %s", req.AdminName), req.SkipBlockKey)
 	if err != nil {
 		state = fmt.Sprintf("Failure -- %s", err)
 		return nil, err
